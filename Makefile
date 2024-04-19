@@ -7,7 +7,7 @@ FILE = proj2
 $(FILE): $(FILE).c
 	$(CC) $(CFLAGS) -o $(FILE) $(FILE).c
 clean: 
-	rm -f $(FILE).o $(FILE)
+	rm -f $(FILE)
 
 zip: $(FILE).c Makefile
 	zip $(FILE).zip $(FILE).c Makefile
