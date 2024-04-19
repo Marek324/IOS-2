@@ -2,7 +2,7 @@ CC = gcc
 CFLAGS = -std=gnu99 -Wall -Wextra -Werror -pedantic
 FILE = proj2
 
-.PHONY: clean zip test
+.PHONY: clean zip memtest test 
 
 $(FILE): $(FILE).c
 	$(CC) $(CFLAGS) -o $(FILE) $(FILE).c
@@ -12,6 +12,14 @@ clean:
 
 zip: $(FILE).c Makefile
 	zip $(FILE).zip $(FILE).c Makefile
+
+memtest:
+	rm -rf $(FILE)
+	$(CC) $(CFLAGS) -g -o $(FILE) $(FILE).c
+	valgrind -s --leak-check=full ./$(FILE) 8 4 10 4 5
+	rm -rf $(FILE)
+	$(CC) $(CFLAGS) -o $(FILE) $(FILE).c
+
 
 test: $(FILE)
 	./$(FILE) 8 4 10 4 5 > $(FILE).out
