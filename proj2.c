@@ -41,11 +41,14 @@ int **waiting;
 sem_t *mutex;
 sem_t **bus;
 sem_t *boarded;
+sem_t *finalDst;
+sem_t *disembarked;
 
 int *idZ;
 
 TArguments *args;
 
+void skibus();
 void lyzar(int id);
 
 int main(int argc, char *argv[])
@@ -245,6 +248,32 @@ void allocMem()
     }
     memset(waiting, 0, sizeof(int) * args->Z);
 
+    // Allocate and initialize disembarked semaphore
+    disembarked = mmap(NULL, sizeof(sem_t), PROT_READ | PROT_WRITE, MAP_SHARED | MAP_ANONYMOUS, -1, 0);
+    if (disembarked == MAP_FAILED)
+    {
+        perror("mmap for disembarked semaphore");
+        exit(EXIT_FAILURE);
+    }
+    if (sem_init(disembarked, 1, 0) == -1)
+    {
+        perror("sem_init for disembarked semaphore");
+        exit(EXIT_FAILURE);
+    }
+
+    // Allocate and initialize finalDst semaphore
+    finalDst = mmap(NULL, sizeof(sem_t), PROT_READ | PROT_WRITE, MAP_SHARED | MAP_ANONYMOUS, -1, 0);
+    if (finalDst == MAP_FAILED)
+    {
+        perror("mmap for finalDst semaphore");
+        exit(EXIT_FAILURE);
+    }
+    if (sem_init(finalDst, 1, 0) == -1)
+    {
+        perror("sem_init for finalDst semaphore");
+        exit(EXIT_FAILURE);
+    }
+
     // Allocate memory for idZ
     idZ = mmap(NULL, sizeof(int), PROT_READ | PROT_WRITE, MAP_SHARED | MAP_ANONYMOUS, -1, 0);
     if (idZ == MAP_FAILED)
@@ -313,6 +342,26 @@ void freeMem()
     if (munmap(waiting, sizeof(int) * args->Z) == -1)
     {
         perror("munmap for waiting array");
+    }
+
+    // Destroy and unmap finalDst semaphore
+    if (sem_destroy(finalDst) == -1)
+    {
+        perror("sem_destroy for finalDst semaphore");
+    }
+    if (munmap(finalDst, sizeof(sem_t)) == -1)
+    {
+        perror("munmap for finalDst semaphore");
+    }
+
+    // Destroy and unmap disembarked semaphore
+    if (sem_destroy(disembarked) == -1)
+    {
+        perror("sem_destroy for disembarked semaphore");
+    }
+    if (munmap(disembarked, sizeof(sem_t)) == -1)
+    {
+        perror("munmap for disembarked semaphore");
     }
 
     // Unmap args
