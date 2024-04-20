@@ -68,7 +68,12 @@ int main(int argc, char *argv[])
 
     allocMem();
 
-    skibus();
+    pid_t p = fork();
+    if (p == 0)
+    {
+        skibus();
+        exit(0);
+    }
 
     for (int i = 0; i < args->L; i++)
     {
@@ -77,9 +82,7 @@ int main(int argc, char *argv[])
         {
             lyzar(i);
         }
-        
     }
-    
 
     freeMem();
 
