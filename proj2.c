@@ -37,13 +37,12 @@ void print(const char *fmt, ...);
 int *lineNumPtr;
 sem_t *output;
 
-int **waiting;
+int *waiting;
 sem_t *mutex;
 sem_t **bus;
 sem_t *boarded;
 sem_t *finalDst;
 sem_t *disembarked;
-
 int *idZ;
 
 TArguments *args;
@@ -55,6 +54,11 @@ int main(int argc, char *argv[])
 {
 
     args = mmap(NULL, sizeof(TArguments), PROT_READ | PROT_WRITE, MAP_SHARED | MAP_ANONYMOUS, -1, 0);
+    if (args == MAP_FAILED)
+    {
+        perror("mmap for args");
+        exit(EXIT_FAILURE);
+    }
 
     if (!parseArgs(argc, argv))
     {
@@ -63,6 +67,19 @@ int main(int argc, char *argv[])
     }
 
     allocMem();
+
+    skibus();
+
+    for (int i = 0; i < args->L; i++)
+    {
+        pid_t id = fork();
+        if (id == 0)
+        {
+            lyzar(i);
+        }
+        
+    }
+    
 
     freeMem();
 
@@ -246,7 +263,6 @@ void allocMem()
         perror("mmap for waiting array");
         exit(EXIT_FAILURE);
     }
-    memset(waiting, 0, sizeof(int) * args->Z);
 
     // Allocate and initialize disembarked semaphore
     disembarked = mmap(NULL, sizeof(sem_t), PROT_READ | PROT_WRITE, MAP_SHARED | MAP_ANONYMOUS, -1, 0);
@@ -376,7 +392,7 @@ int waitingSum()
     int sum = 0;
     for (int i = 0; i < args->Z; i++)
     {
-        sum += *waiting[i];
+        sum += waiting[i];
     }
 
     return sum;
@@ -395,14 +411,14 @@ void skibus()
             print("BUS: arrived to %d\n", idZ);
             sem_wait(mutex);
 
-            int count = (*waiting[*idZ] < cap) ? *waiting[*idZ] : cap;
+            int count = (waiting[*idZ] < cap) ? waiting[*idZ] : cap;
             for (int i = 0; i < count; i++)
             {
                 sem_post(bus[*idZ]);
                 sem_wait(boarded);
             }
 
-            *waiting[*idZ] = (*waiting[*idZ] - cap > 0) ? *waiting[*idZ] - cap : 0;
+            waiting[*idZ] = (waiting[*idZ] - cap > 0) ? waiting[*idZ] - cap : 0;
             cap -= count;
 
             print("BUS: leaving %d\n", *idZ);
@@ -419,8 +435,8 @@ void skibus()
         for (int i = 0; i < args->K - cap; i++)
         {
             cap = 0;
-            // sem_post(finalDst)
-            // sem_wait(disembarked)
+            sem_post(finalDst);
+            sem_wait(disembarked);
         }
 
         sem_post(mutex);
@@ -434,7 +450,7 @@ void lyzar(int id)
     sem_wait(mutex);
 
     int stop = (rand() % args->Z) + 1;
-    (*waiting[stop])++;
+    (waiting[stop])++;
 
     sem_post(mutex);
 
@@ -447,9 +463,11 @@ void lyzar(int id)
     print("L %d: boarding\n", id);
     sem_post(boarded);
 
-    // sem_wait(finalDst)
+    sem_wait(finalDst);
     print("L %d: going to ski\n", id);
-    // sem_post(disemabarked)
+    sem_post(disembarked);
+
+    exit(0);
 }
 
 void print(const char *fmt, ...)
