@@ -1,3 +1,5 @@
 *.zip
 *.sh
+*.out
 proj2
+deadlock_check
