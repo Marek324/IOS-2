@@ -171,50 +171,38 @@ bool isNumber(char *str)
     return 1;
 }
 
+#define map(name, size)                                                                 \
+    name = mmap(NULL, size, PROT_READ | PROT_WRITE, MAP_SHARED | MAP_ANONYMOUS, -1, 0); \
+    if (output == MAP_FAILED)                                                           \
+    {                                                                                   \
+        perror("mmap for output semaphore");                                            \
+        exit(EXIT_FAILURE);                                                             \
+    }
+
+#define init(name, value)               \
+    if (sem_init(name, 1, value) == -1) \
+    {                                   \
+        perror("sem_init for " #name);  \
+        freeMem();                      \
+        exit(EXIT_FAILURE);             \
+    }
+
 void allocMem()
 {
     // Allocate and initialize output semaphore
-    output = mmap(NULL, sizeof(sem_t), PROT_READ | PROT_WRITE, MAP_SHARED | MAP_ANONYMOUS, -1, 0);
-    if (output == MAP_FAILED)
-    {
-        perror("mmap for output semaphore");
-        exit(EXIT_FAILURE);
-    }
-    if (sem_init(output, 1, 1) == -1)
-    {
-        perror("sem_init for output semaphore");
-        exit(EXIT_FAILURE);
-    }
+    map(output, sizeof(sem_t));
+    init(output, 1);
 
     // Allocate and initialize lineNumPtr
-    lineNumPtr = mmap(NULL, sizeof(int), PROT_READ | PROT_WRITE, MAP_SHARED | MAP_ANONYMOUS, -1, 0);
-    if (lineNumPtr == MAP_FAILED)
-    {
-        perror("mmap for lineNumPtr");
-        exit(EXIT_FAILURE);
-    }
+    map(lineNumPtr, sizeof(int));
     *lineNumPtr = 1;
 
     // Allocate and initialize mutex semaphore
-    mutex = mmap(NULL, sizeof(sem_t), PROT_READ | PROT_WRITE, MAP_SHARED | MAP_ANONYMOUS, -1, 0);
-    if (mutex == MAP_FAILED)
-    {
-        perror("mmap for mutex semaphore");
-        exit(EXIT_FAILURE);
-    }
-    if (sem_init(mutex, 1, 1) == -1)
-    {
-        perror("sem_init for mutex semaphore");
-        exit(EXIT_FAILURE);
-    }
+    map(mutex, sizeof(sem_t));
+    init(mutex, 1);
 
     // Allocate and initialize bus semaphore array
-    bus = mmap(NULL, sizeof(sem_t *) * args->Z, PROT_READ | PROT_WRITE, MAP_SHARED | MAP_ANONYMOUS, -1, 0);
-    if (bus == MAP_FAILED)
-    {
-        perror("mmap for bus semaphore array");
-        exit(EXIT_FAILURE);
-    }
+    map(bus, sizeof(sem_t *) * args->Z);
     for (int i = 0; i < args->Z; i++)
     {
         bus[i] = mmap(NULL, sizeof(sem_t), PROT_READ | PROT_WRITE, MAP_SHARED | MAP_ANONYMOUS, -1, 0);
@@ -247,147 +235,74 @@ void allocMem()
     }
 
     // Allocate and initialize boarded semaphore
-    boarded = mmap(NULL, sizeof(sem_t), PROT_READ | PROT_WRITE, MAP_SHARED | MAP_ANONYMOUS, -1, 0);
-    if (boarded == MAP_FAILED)
-    {
-        perror("mmap for boarded semaphore");
-        exit(EXIT_FAILURE);
-    }
-    if (sem_init(boarded, 1, 0) == -1)
-    {
-        perror("sem_init for boarded semaphore");
-        exit(EXIT_FAILURE);
-    }
+    map(boarded, sizeof(sem_t));
+    init(boarded, 0);
 
     // Allocate and initialize waiting array
-    waiting = mmap(NULL, sizeof(int) * args->Z, PROT_READ | PROT_WRITE, MAP_SHARED | MAP_ANONYMOUS, -1, 0);
-    if (waiting == MAP_FAILED)
-    {
-        perror("mmap for waiting array");
-        exit(EXIT_FAILURE);
-    }
+    map(waiting, sizeof(int) * args->Z);
 
     // Allocate and initialize disembarked semaphore
-    disembarked = mmap(NULL, sizeof(sem_t), PROT_READ | PROT_WRITE, MAP_SHARED | MAP_ANONYMOUS, -1, 0);
-    if (disembarked == MAP_FAILED)
-    {
-        perror("mmap for disembarked semaphore");
-        exit(EXIT_FAILURE);
-    }
-    if (sem_init(disembarked, 1, 0) == -1)
-    {
-        perror("sem_init for disembarked semaphore");
-        exit(EXIT_FAILURE);
-    }
+    map(disembarked, sizeof(sem_t));
+    init(disembarked, 0);
 
     // Allocate and initialize finalDst semaphore
-    finalDst = mmap(NULL, sizeof(sem_t), PROT_READ | PROT_WRITE, MAP_SHARED | MAP_ANONYMOUS, -1, 0);
-    if (finalDst == MAP_FAILED)
-    {
-        perror("mmap for finalDst semaphore");
-        exit(EXIT_FAILURE);
-    }
-    if (sem_init(finalDst, 1, 0) == -1)
-    {
-        perror("sem_init for finalDst semaphore");
-        exit(EXIT_FAILURE);
-    }
+    map(finalDst, sizeof(sem_t));
+    init(finalDst, 0);
 
     // Allocate memory for idZ
-    idZ = mmap(NULL, sizeof(int), PROT_READ | PROT_WRITE, MAP_SHARED | MAP_ANONYMOUS, -1, 0);
-    if (idZ == MAP_FAILED)
-    {
-        perror("mmap for idZ");
-        exit(EXIT_FAILURE);
-    }
+    map(idZ, sizeof(int));
 }
+
+#define destroy(name)                   \
+    if (sem_destroy(name) == -1)         \
+    {                                   \
+        perror("sem_destroy for " #name); \
+    }
+
+#define unmap(name, size)                 \
+    if (munmap(name, size) == -1) \
+    {                                     \
+        perror("munmap for " #name);      \
+    }
 
 void freeMem()
 {
     // Destroy and unmap output semaphore
-    if (sem_destroy(output) == -1)
-    {
-        perror("sem_destroy for output semaphore");
-    }
-    if (munmap(output, sizeof(sem_t)) == -1)
-    {
-        perror("munmap for output semaphore");
-    }
+    destroy(output);
+    unmap(output, sizeof(sem_t));
 
     // Unmap lineNumPtr
-    if (munmap(lineNumPtr, sizeof(int)) == -1)
-    {
-        perror("munmap for lineNumPtr");
-    }
+    unmap(lineNumPtr, sizeof(int));
 
     // Destroy and unmap mutex semaphore
-    if (sem_destroy(mutex) == -1)
-    {
-        perror("sem_destroy for mutex semaphore");
-    }
-    if (munmap(mutex, sizeof(sem_t)) == -1)
-    {
-        perror("munmap for mutex semaphore");
-    }
+    destroy(mutex);
+    unmap(mutex, sizeof(sem_t));
 
     // Destroy and unmap bus semaphores
     for (int i = 0; i < args->Z; i++)
     {
-        if (sem_destroy(bus[i]) == -1)
-        {
-            perror("sem_destroy for bus semaphore");
-        }
-        if (munmap(bus[i], sizeof(sem_t)) == -1)
-        {
-            perror("munmap for bus semaphore");
-        }
+        destroy(bus[i]);
+        unmap(bus[i], sizeof(sem_t));
     }
-    if (munmap(bus, sizeof(sem_t *) * args->Z) == -1)
-    {
-        perror("munmap for bus semaphore array");
-    }
+    unmap(bus, sizeof(sem_t *) * args->Z);
 
     // Destroy and unmap boarded semaphore
-    if (sem_destroy(boarded) == -1)
-    {
-        perror("sem_destroy for boarded semaphore");
-    }
-    if (munmap(boarded, sizeof(sem_t)) == -1)
-    {
-        perror("munmap for boarded semaphore");
-    }
+    destroy(boarded);
+    unmap(boarded, sizeof(sem_t));
 
     // Unmap waiting array
-    if (munmap(waiting, sizeof(int) * args->Z) == -1)
-    {
-        perror("munmap for waiting array");
-    }
+    unmap(waiting, sizeof(int) * args->Z);
 
     // Destroy and unmap finalDst semaphore
-    if (sem_destroy(finalDst) == -1)
-    {
-        perror("sem_destroy for finalDst semaphore");
-    }
-    if (munmap(finalDst, sizeof(sem_t)) == -1)
-    {
-        perror("munmap for finalDst semaphore");
-    }
+    destroy(finalDst);
+    unmap(finalDst, sizeof(sem_t));
 
     // Destroy and unmap disembarked semaphore
-    if (sem_destroy(disembarked) == -1)
-    {
-        perror("sem_destroy for disembarked semaphore");
-    }
-    if (munmap(disembarked, sizeof(sem_t)) == -1)
-    {
-        perror("munmap for disembarked semaphore");
-    }
+    destroy(disembarked);
+    unmap(disembarked, sizeof(sem_t));
 
     // Unmap args
-    if (munmap(args, sizeof(TArguments)) == -1)
-    {
-        perror("munmap for TArguments");
-    }
+    unmap(args, sizeof(TArguments));
 }
 
 int waitingSum()
@@ -408,11 +323,11 @@ void skibus()
     {
         *idZ = 1;
         int cap = args->K;
-        while (*idZ <= args->Z)
+        while (*idZ > args->Z)
         {
+            sem_wait(mutex);
             usleep((rand() % args->TB) + 1);
             print("BUS: arrived to %d\n", idZ);
-            sem_wait(mutex);
 
             int count = (waiting[*idZ] < cap) ? waiting[*idZ] : cap;
             for (int i = 0; i < count; i++)
