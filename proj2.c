@@ -51,7 +51,7 @@ sem_t **bus;
 FILE *outputFile;
 
 void skibus();
-void lyzar(int id);
+void lyzar(int id, int stop);
 
 int main(int argc, char *argv[])
 {
@@ -84,13 +84,25 @@ int main(int argc, char *argv[])
     {
         skibus();
     }
+    else if (pid < 0)
+    {
+        perror("fork fail");
+        exit(1);
+    }
 
     for (int i = 0; i < args->L; i++) // create lyzar processes
     {
         pid_t pid = fork();
         if (pid == 0)
         {
-            lyzar(i + 1);
+            srand((time(NULL) & getpid()) ^ (getpid() << 8)); // seed the random number generator
+            int stop = rand() % args->Z;                      // get the random stop
+            lyzar(i + 1, stop);
+        }
+        else if (pid < 0)
+        {
+            perror("fork fail");
+            exit(1);
         }
     }
 
@@ -189,6 +201,7 @@ bool isNumber(char *str)
     if (outMutex == MAP_FAILED)                                                         \
     {                                                                                   \
         perror("mmap for " #name);                                                      \
+        freeMem();                                                                      \
         exit(EXIT_FAILURE);                                                             \
     }
 
@@ -273,17 +286,17 @@ void allocMem()
         perror("sem_destroy for " #name); \
     }
 
-#define unmap(name, size)            \
-    if (munmap(name, size) == -1)    \
-    {                                \
-        perror("munmap for " #name); \
+#define unmap(name, size)                \
+    if (name != NULL)                    \
+    {                                    \
+        if (munmap(name, size) == -1)    \
+        {                                \
+            perror("munmap for " #name); \
+        }                                \
     }
 
 void freeMem()
 {
-    // Unmap args
-    unmap(args, sizeof(TArguments));
-
     // Unmap lineNumPtr
     unmap(lineNumPtr, sizeof(int));
 
@@ -292,11 +305,14 @@ void freeMem()
     unmap(outMutex, sizeof(sem_t));
 
     // Unmap waiting array
-    unmap(waiting, sizeof(int) * args->Z);
+    // unmap(waiting, (sizeof(int) * args->Z));
+    if (munmap(waiting, sizeof(int) * args->Z) == -1)
+    {
+        perror("munmap for waiting");
+    }
 
     // Unmap transported
     unmap(transported, sizeof(int));
-    fclose(outputFile);
 
     // Destroy and unmap mutex semaphore
     destroy(mutex);
@@ -321,6 +337,12 @@ void freeMem()
         unmap(bus[i], sizeof(sem_t));
     }
     unmap(bus, sizeof(sem_t *) * args->Z);
+
+    // Unmap args
+    unmap(args, sizeof(TArguments));
+
+    // Close output file
+    fclose(outputFile);
 }
 
 int min(int a, int b);
@@ -333,38 +355,42 @@ void skibus()
 
     while (*transported < args->L) // while there are still passengers to transport
     {
+        sem_wait(mutex);
         idZ = 0;               // index of the stop
         int currCap = args->K; // current capacity of the bus
+        sem_post(mutex);
 
         while (idZ < args->Z) // while there are still stops to visit
         {
-            usleep((rand() % args->TB) + 1); // simulate travel time
+            usleep(rand() % (args->TB + 1)); // simulate travel time
+            sem_wait(mutex);
             print("BUS: arrived to %d\n", (idZ) + 1);
 
-            sem_wait(mutex);
             int count = min(waiting[idZ], currCap); // get the number of passengers to board
 
             for (int i = 0; i < count; i++) // board the passengers
             {
-                sem_post(bus[idZ]);
-                sem_wait(boarded);
+                sem_post(bus[idZ]); // signal the passenger to board
+                sem_wait(boarded);  // wait for the passenger to board
             }
             waiting[idZ] -= count; // update the number of waiting passengers on the idZ stop
-            sem_post(mutex);
-            currCap -= count; // update the current capacity of the bus
+            currCap -= count;      // update the current capacity of the bus
 
             print("BUS: leaving %d\n", (idZ) + 1);
             (idZ)++; // move to the next stop
+            sem_post(mutex);
         }
 
-        usleep((rand() % args->TB) + 1);
+        usleep(rand() % (args->TB + 1)); // simulate travel time
         print("BUS: arrived to final\n");
 
+        sem_wait(mutex);
         for (int i = 0; i < args->K - currCap; i++) // disembark the passengers
         {
             sem_post(finalDst);    // signal that the bus has arrived to the final destination
             sem_wait(disembarked); // wait for the passenger to disembark
         }
+        sem_post(mutex);
 
         print("BUS: leaving final\n");
     }
@@ -378,31 +404,25 @@ int min(int a, int b)
     return a < b ? a : b; // return the smaller of the two
 }
 
-void lyzar(int id)
+void lyzar(int id, int stop)
 {
-    srand((time(NULL) & getpid()) ^ (getpid() << 16)); // seed the random number generator
-
-    sem_wait(mutex);
-    int stop = (rand() % args->Z); // choose a random stop
-    (waiting[stop])++;             // increment the number of waiting passengers on the stop
-    sem_post(mutex);
 
     print("L %d: started\n", id);
-    usleep((rand() % args->TL) + 1); // simulate time to get to the stop
+    sem_wait(mutex);
+    (waiting[stop])++; // increment the number of waiting passengers on the stop
+    sem_post(mutex);
+
+    usleep(rand() % (args->TL + 1)); // simulate time to get to the stop
 
     print("L %d: arrived to %d\n", id, stop + 1);
 
     sem_wait(bus[stop]); // wait for the bus to arrive
     print("L %d: boarding\n", id);
+    (*transported)++;  // increment the number of transported passengers
     sem_post(boarded); // signal that the passenger has boarded
 
     sem_wait(finalDst); // wait for the bus to arrive to the final destination
     print("L %d: going to ski\n", id);
-
-    sem_wait(mutex);
-    (*transported)++; // increment the number of transported passengers
-    sem_post(mutex);
-
     sem_post(disembarked); // signal that the passenger has disembarked
 
     freeMem(); // free memory
