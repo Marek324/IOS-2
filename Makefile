@@ -9,7 +9,7 @@ $(FILE): $(FILE).c
 	$(CC) $(CFLAGS) -o $(FILE) $(FILE).c $(LDFLAGS)
 
 clean: 
-	rm -rf $(FILE) $(FILE).zip
+	rm -rf $(FILE) *.zip *.out
 
 zip: $(FILE).c Makefile
 	zip $(FILE).zip $(FILE).c Makefile
