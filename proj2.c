@@ -87,6 +87,7 @@ int main(int argc, char *argv[])
     else if (pid < 0)
     {
         perror("fork fail");
+        freeMem();
         exit(1);
     }
 
@@ -102,6 +103,7 @@ int main(int argc, char *argv[])
         else if (pid < 0)
         {
             perror("fork fail");
+            freeMem();
             exit(1);
         }
     }
@@ -198,7 +200,7 @@ bool isNumber(char *str)
 
 #define map(name, size)                                                                 \
     name = mmap(NULL, size, PROT_READ | PROT_WRITE, MAP_SHARED | MAP_ANONYMOUS, -1, 0); \
-    if (outMutex == MAP_FAILED)                                                         \
+    if (name == MAP_FAILED)                                                             \
     {                                                                                   \
         perror("mmap for " #name);                                                      \
         freeMem();                                                                      \
